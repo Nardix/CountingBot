@@ -12,7 +12,7 @@ import os
 from dotenv import load_dotenv
 import locale
 import random
-from query import queries
+from QueryClass import Query
 from telegram.error import Conflict, NetworkError
 from telegram._utils.defaultvalue import DEFAULT_NONE
 
@@ -34,13 +34,13 @@ logger = logging.getLogger(__name__)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
-    check = runQuery(queries.get("profilo").format(chat_id=update.effective_chat.id, user_id=user.id))
+    check = runQuery(Query.profilo(chat_id=update.effective_chat.id, user_id=user.id))
     if len(check)==0:
         data = update.effective_message.date.astimezone(pytz.timezone('Europe/Rome')).strftime('%Y-%m-%d %H:%M:%S')
-        runQuery(queries.get("registrazione").format(chat_id=update.effective_chat.id, user_full_name=user.full_name, user_id=user.id, data=data))
-        await runMessageUpdate(rf"*{user.full_name}* si è registrato!", update, parse_mode='Markdown')
+        runQuery(Query.registrazione(chat_id=update.effective_chat.id, user_id=user.id, user_full_name=user.full_name, data=data))
+        await runMessageUpdate(rf"*{user.full_name}* si è registrato/a!", update, parse_mode='Markdown')
     else:
-        await runMessageUpdate(rf"*{user.full_name}* si è già registrato!", update, parse_mode='Markdown')
+        await runMessageUpdate(rf"*{user.full_name}* si è già registrato/a!", update, parse_mode='Markdown')
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -57,31 +57,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await runMessageUpdate(message, update)
 
 
-async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.message and (update.message.text == "🔝" or (update.message.sticker != None and update.message.sticker.emoji == "🔝")):
-        user = update.effective_user
-        data = update.effective_message.date.astimezone(pytz.timezone('Europe/Rome')).strftime('%Y-%m-%d %H:%M:%S')
-        content = runQuery(queries.get("controllo").format(chat_id=update.effective_chat.id , user_id=user.id, user_full_name=user.full_name, data=data))
-        buffer = ""
-        if len(content)!=0:
-            if content[0].get('result')==1:
-                buffer = "\n🎉 nuovo record 🎉"
-            content2 = runQuery(queries.get("sorpasso").format(chat_id=update.effective_chat.id, total=content[0].get('total')-1))
-            if len(content2)!=0:
-                buffer = buffer + f"\n🏁 *{user.full_name}* ha appena superato *{content2[0].get('nome')}* 🏁"
-            await runMessageUpdate(f"*{user.full_name}* nuovo punteggio di {content[0].get('total')} questo mese{buffer}", update, parse_mode='Markdown')
-            if content[0].get('fulltotal')%100==0:
-                await runMessageUpdate(f"🎉 *{user.full_name}* ha raggiunto un punteggio totale di {content[0].get('fulltotal')}, congratulazioni! 🎉", update, parse_mode='Markdown')
-                await context.bot.send_voice(update.effective_chat.id, voice=open(victory_sound_choice(), 'rb'))
-        else:    
-            await runMessageUpdate(rf"*{user.full_name}* non sei ancora registrato! usa il comando /start per registrati", update, parse_mode='Markdown')
-
-
-async def winner(context: ContextTypes.DEFAULT_TYPE) -> None:
-    job = context.job
+async def reset(chat_id: int, context: ContextTypes.DEFAULT_TYPE) -> None:
     buffer1 = buffer2 = ""
     val_tot = 0
-    content = runQuery(queries.get("classifica").format(chat_id=job.chat_id))
+    content = runQuery(Query.winner(chat_id=chat_id))
     for i,user in enumerate(content):
         if i<3:
             buffer1 = buffer1 + f"{i+1}) *{user.get('nome')}* con {user.get('total')} punti\n"
@@ -96,21 +75,55 @@ async def winner(context: ContextTypes.DEFAULT_TYPE) -> None:
         "- 🎖️ *ALTRI* 🎖️ -\n\n"
         f"{buffer2}\n"
         f"I primi {len(content)} hanno effettuato un totale di {val_tot} punti questo mese.\n\n"
-        "Le statistiche mensili sono state resettate, potete comunque vedere il totale del punteggio effettuato con il comando /profilo"
+        "Le statistiche mensili sono state resettate, potete comunque vedere il totale dei punti con il comando /profilo"
     )
 
-    await runMessageContext(message, context, parse_mode='Markdown', chat_id=job.chat_id)
-    runQuery(queries.get("reset all"))
+    await runMessageContext(message, context, parse_mode='Markdown', chat_id=chat_id)
+    runQuery(Query.reset_all())
+
+
+async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if update.message and (update.message.text == "🔝" or (update.message.sticker != None and update.message.sticker.emoji == "🔝")):
+        user = update.effective_user
+        dataAsTimezone = update.effective_message.date.astimezone(pytz.timezone('Europe/Rome'))
+        data = dataAsTimezone.strftime('%Y-%m-%d %H:%M:%S')
+        dataAsYearMonth = dataAsTimezone.strftime('%Y-%m')
+        dataReset = runQuery(Query.get_dataReset())[0].get('data')
+        if datet.strptime(dataAsYearMonth, '%Y-%m') > datet.strptime(dataReset, '%Y-%m'):
+            await reset(update.effective_chat.id, context)
+            runQuery(Query.set_dataReset(data=dataAsYearMonth))
+            logger.info("reset effettuato")
+        content = runQuery(Query.controllo(chat_id=update.effective_chat.id, user_id=user.id, user_full_name=user.full_name, data=data))
+        buffer = ""
+        if len(content)!=0:
+            if content[0].get('result')==1:
+                buffer = "\n🎉 nuovo record 🎉"
+            content2 = runQuery(Query.sorpasso(chat_id=update.effective_chat.id, total=content[0].get('total')-1))
+            if len(content2)!=0:
+                buffer = buffer + f"\n🏁 *{user.full_name}* ha appena superato *{content2[0].get('nome')}* 🏁"
+            await runMessageUpdate(f"*{user.full_name}* punteggio incrementato! Per un totale di {content[0].get('total')} volte questo mese{buffer}", update, parse_mode='Markdown')
+            if content[0].get('fulltotal')%100==0:
+                await runMessageUpdate(f"🎉 *{user.full_name}* ha raggiunto {content[0].get('fulltotal')} punti totali, congratulazioni! 🎉", update, parse_mode='Markdown')
+                await context.bot.send_voice(update.effective_chat.id, voice=open(victory_sound_choice(), 'rb'), reply_to_message_id=update.effective_message.message_id)
+        else:    
+            await runMessageUpdate(rf"*{user.full_name}* non sei ancora registrato! usa il comando /start per registrati", update, parse_mode='Markdown')
+
+
+async def winner(context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = context.job.chat_id
+    await reset(chat_id, context)
+    runQuery(Query.set_dataReset(data=datet.now().strftime('%Y-%m')))
+    logger.info("winner effettuato")
 
 
 async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
-    content = runQuery(queries.get("profilo").format(chat_id=update.effective_chat.id, user_id=user.id))
+    content = runQuery(Query.profilo(chat_id=update.effective_chat.id, user_id=user.id))
     if len(content)!=0:
         if content[0].get('u.total')==0:
-            await runMessageUpdate(f"*{user.full_name}* non ha ancora effettuato punti questo mese\n{content[0].get('u.fulltotal')} punti totali\n{content[0].get('u.record')} - record massimo in un mese", update, parse_mode='Markdown')
+            await runMessageUpdate(f"*{user.full_name}* non ha ancora fatto punti questo mese\n{content[0].get('u.fulltotal')} punti totali\n{content[0].get('u.record')} - record massimo in un mese", update, parse_mode='Markdown')
         else:
-            await runMessageUpdate(f"*{user.full_name}* ha un punteggio di {content[0].get('u.total')} questo mese\n{content[0].get('u.fulltotal')} punti totali\nrecord massimo in un mese: {content[0].get('u.record')} punti", update, parse_mode='Markdown')
+            await runMessageUpdate(f"*{user.full_name}* ha effettuato {content[0].get('u.total')} punti questo mese\n{content[0].get('u.fulltotal')} punti totali\nrecord massimo in un mese: {content[0].get('u.record')} punti", update, parse_mode='Markdown')
     else:
         await runMessageUpdate(f"*{user.full_name}* non sei ancora registrato! usa il comando /start per registrati", update, parse_mode='Markdown')
 
@@ -119,9 +132,9 @@ async def hallOfFame(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     chat_id = update.effective_message.chat_id
     buffer = ""
     val_tot = 0
-    content = runQuery(queries.get("classifica").format(chat_id=chat_id))
+    content = runQuery(Query.classifica(chat_id=chat_id))
     if len(content)==0:
-        await runMessageContext("Nessuno ha ancora effettuato punti", context, chat_id=chat_id)
+        await runMessageContext("Nessuno ha ancora fatto punti", context, chat_id=chat_id)
         return
 
     for i,user in enumerate(content):
@@ -142,9 +155,9 @@ async def hallOfFameTotal(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     chat_id = update.effective_message.chat_id
     buffer = ""
     val_tot = 0
-    content = runQuery(queries.get("classifica totale").format(chat_id=chat_id))
+    content = runQuery(Query.classifica_totale(chat_id=chat_id))
     if len(content)==0:
-        await runMessageContext("Nessuno ha ancora effettuato punti", context, chat_id=chat_id)
+        await runMessageContext("Nessuno ha ancora fatto punti", context, chat_id=chat_id)
         return
 
     for i,user in enumerate(content):
@@ -164,9 +177,9 @@ async def record(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.effective_message.chat_id
     buffer = ""
     val_tot = 0
-    content = runQuery(queries.get("record").format(chat_id=chat_id))
+    content = runQuery(Query.record(chat_id=chat_id))
     if len(content)==0:
-        await runMessageContext("Nessuno ha ancora effettuato punti", context, chat_id=chat_id)
+        await runMessageContext("Nessuno ha ancora fatto punti", context, chat_id=chat_id)
         return
 
     for i,user in enumerate(content):
@@ -238,37 +251,15 @@ def errorQuery(query):
 async def runMessageUpdate(message: str, content: Update, parse_mode = DEFAULT_NONE):
     try:
         await content.message.reply_text(message, parse_mode=parse_mode)
-    except:
-        await errorMessageUpdate(message, content, parse_mode=parse_mode)
+    except Exception as e:
+        logger.error(f"Error sending message: {e}")
 
 
 async def runMessageContext(message: str, content: ContextTypes.DEFAULT_TYPE, parse_mode = DEFAULT_NONE, chat_id = None):
     try:
         await content.bot.send_message(chat_id, text=message, parse_mode=parse_mode)
-    except:
-        await errorMessageContext(message, content, parse_mode=parse_mode, chat_id=chat_id)
-
-
-async def errorMessageUpdate(message: str, content: Update, parse_mode = DEFAULT_NONE):
-    tentativi=0
-    while True:
-        tentativi+=1
-        try:
-            await content.message.reply_text(message, parse_mode=parse_mode)
-            break
-        except:
-            logger.error("errore messaggio, tentativi: " + str(tentativi))
-
-
-async def errorMessageContext(message: str, content: ContextTypes.DEFAULT_TYPE, parse_mode = DEFAULT_NONE, chat_id = None):
-    tentativi=0
-    while True:
-        tentativi+=1
-        try:
-            await content.bot.send_message(chat_id, text=message, parse_mode=parse_mode)
-            break
-        except:
-            logger.error("errore messaggio, tentativi: " + str(tentativi))
+    except Exception as e:
+        logger.error(f"Error sending message: {e}")
 
 
 def main() -> None:
