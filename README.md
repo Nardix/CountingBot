@@ -63,7 +63,7 @@ visualizzabili tramite gli appositi comandi
    NEO4J_URI=???
    NEO4J_USERNAME=???
    NEO4J_PASSWORD=???
-   TOKEN=???
+   TOKEN_ORIGINAL=???
    CHAT_ID=???
    ```
 
