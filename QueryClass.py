@@ -16,6 +16,12 @@ class Query:
             "MATCH (u:User) "
             "SET u.total = 0"
         )
+    
+    @staticmethod
+    def create_dataReset(data):
+        return (
+            f"CREATE (n:DataReset {{data: '{data}'}})"
+        )
 
     @staticmethod
     def set_dataReset(data):

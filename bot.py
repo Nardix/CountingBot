@@ -33,14 +33,18 @@ logger = logging.getLogger(__name__)
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user = update.effective_user
-    check = runQuery(Query.profilo(chat_id=update.effective_chat.id, user_id=user.id))
-    if len(check)==0:
-        data = update.effective_message.date.astimezone(pytz.timezone('Europe/Rome')).strftime('%Y-%m-%d %H:%M:%S')
-        runQuery(Query.registrazione(chat_id=update.effective_chat.id, user_id=user.id, user_full_name=user.full_name, data=data))
-        await runMessageUpdate(rf"*{user.full_name}* si è registrato/a!", update, parse_mode='Markdown')
+    dataReset = runQuery(Query.get_dataReset())[0].get('data')
+    if len(dataReset)!=0:
+        user = update.effective_user
+        check = runQuery(Query.profilo(chat_id=update.effective_chat.id, user_id=user.id))
+        if len(check)==0:
+            data = update.effective_message.date.astimezone(pytz.timezone('Europe/Rome')).strftime('%Y-%m-%d %H:%M:%S')
+            runQuery(Query.registrazione(chat_id=update.effective_chat.id, user_id=user.id, user_full_name=user.full_name, data=data))
+            await runMessageUpdate(rf"*{user.full_name}* si è registrato/a!", update, parse_mode='Markdown')
+        else:
+            await runMessageUpdate(rf"*{user.full_name}* si è già registrato/a!", update, parse_mode='Markdown')
     else:
-        await runMessageUpdate(rf"*{user.full_name}* si è già registrato/a!", update, parse_mode='Markdown')
+        runQuery(Query.create_dataReset(data=dataReset))
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
