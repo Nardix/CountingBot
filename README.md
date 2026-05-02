@@ -41,7 +41,7 @@ visualizzabili tramite gli appositi comandi
 1. **Clona il repository**
    ```bash
    git clone https://github.com/Nardix/Bot-Telegram.git
-   cd Bot-Telegram
+   cd CountingBot
    ```
 
 2. **Installa le dipendenze**
@@ -64,7 +64,6 @@ visualizzabili tramite gli appositi comandi
    NEO4J_USERNAME=???
    NEO4J_PASSWORD=???
    TOKEN_ORIGINAL=???
-   TOKEN_TEST=???
    CHAT_ID=???
    ```
 
